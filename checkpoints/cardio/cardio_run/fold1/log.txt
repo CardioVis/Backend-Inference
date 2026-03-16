@@ -1,0 +1,25 @@
+Epoch 0, Total train steps 173 || Loss: 0.95565, Dice: 0.9414, IoU: 0.9041
+New best epoch 0! Dice: 0.8942
+Epoch 1, Total train steps 173 || Loss: 0.94630, Dice: 0.9800, IoU: 0.9617
+New best epoch 1! Dice: 0.9005
+Epoch 2, Total train steps 173 || Loss: 0.94540, Dice: 0.9839, IoU: 0.9688
+New best epoch 2! Dice: 0.9045
+Epoch 3, Total train steps 173 || Loss: 0.94523, Dice: 0.9853, IoU: 0.9716
+New best epoch 3! Dice: 0.9077
+Epoch 4, Total train steps 173 || Loss: 0.94486, Dice: 0.9867, IoU: 0.9742
+Epoch 5, Total train steps 173 || Loss: 0.94450, Dice: 0.9880, IoU: 0.9765
+New best epoch 5! Dice: 0.9093
+Epoch 6, Total train steps 173 || Loss: 0.94443, Dice: 0.9885, IoU: 0.9776
+New best epoch 6! Dice: 0.9121
+Epoch 7, Total train steps 173 || Loss: 0.94418, Dice: 0.9887, IoU: 0.9780
+Epoch 8, Total train steps 173 || Loss: 0.94425, Dice: 0.9895, IoU: 0.9794
+New best epoch 8! Dice: 0.9139
+Epoch 9, Total train steps 173 || Loss: 0.94442, Dice: 0.9904, IoU: 0.9811
+New best epoch 9! Dice: 0.9140
+Epoch 10, Total train steps 173 || Loss: 0.94367, Dice: 0.9909, IoU: 0.9822
+Epoch 11, Total train steps 173 || Loss: 0.94392, Dice: 0.9911, IoU: 0.9825
+Epoch 12, Total train steps 173 || Loss: 0.94389, Dice: 0.9916, IoU: 0.9834
+New best epoch 12! Dice: 0.9159
+Epoch 13, Total train steps 173 || Loss: 0.94389, Dice: 0.9918, IoU: 0.9839
+New best epoch 13! Dice: 0.9169
+Epoch 14, Total train steps 173 || Loss: 0.94370, Dice: 0.9924, IoU: 0.9850

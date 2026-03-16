@@ -1,0 +1,49 @@
+data:
+  img_size: 224
+  k_fold: 'No'
+  name: cardio
+  num_classes: 4
+  save_folder: checkpoints/cardio
+  test_folder: data_processed/cardio/train/labeled_data
+  train_aug: true
+  train_folder: data_processed/cardio/train/labeled_data
+  unlabeled_folder: data_processed/cardio/train/unlabeled_data
+  val_folder: data_processed/cardio/train/labeled_data
+debug: false
+device: !!python/object/apply:torch.device
+- cuda
+fold: 1
+log: false
+model_adapt:
+  adapt_method: false
+  num_domains: false
+model_encoder_id: 0
+seed: 1
+semi:
+  conf_thresh: 0.95
+test:
+  batch_size: 8
+  num_workers: 4
+  only_test: false
+  test_model_dir: ''
+train:
+  ema_decay: 0.99
+  l_batchsize: 8
+  num_epochs: 100
+  num_iters: false
+  num_workers: 4
+  optimizer:
+    adam:
+      betas:
+      - 0.9
+      - 0.999
+      lr: 1e-4
+    adamw:
+      betas:
+      - 0.9
+      - 0.999
+      eps: 1e-8
+      lr: 1e-4
+      weight_decay: 0.05
+    mode: adamw
+  u_batchsize: 8
