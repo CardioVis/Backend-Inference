@@ -1,4 +1,4 @@
 .cursor/debug-988c41.log
 **/cardiovis-debug-988c41.ndjson
 checkpoints/
-download_frames_labels.py
+__pycache__/
