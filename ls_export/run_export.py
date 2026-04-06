@@ -9,12 +9,15 @@ from label_studio_sdk import LabelStudio
 from label_studio_sdk.core.api_error import ApiError
 
 from ls_export.cf_repair import _repair_yolo_zip_with_cf_auth
+from ls_export.download_progress import write_download_stream
+from ls_export.export_normalize import normalize_ls_yolo_filenames
 from ls_export.export_api import (
     _export_serialization_options,
     _export_task_filter_options,
     _wait_for_converted_format,
 )
 from ls_export.logging_support import _agent_log, _log_api_error
+from ls_export.guideline_export import write_guideline_seq_from_extract
 from ls_export.yolo_patch import _patch_yolo_zip_labels_from_json
 
 
@@ -62,6 +65,9 @@ def _run_export(
     output_parent: Path,
     *,
     extract: bool,
+    normalize_frame_names: bool = True,
+    guideline_mapping: Path | None = None,
+    guideline_subdir: str = "guideline_seq",
 ) -> None:
     export_type = os.environ.get("LABEL_STUDIO_EXPORT_TYPE", "YOLO_WITH_IMAGES")
     download_resources, repair_cf_images = _export_resource_flags(cf_headers)
@@ -139,10 +145,13 @@ def _run_export(
 
     try:
         with open(out_path, "wb") as out_f:
-            for chunk in ls.projects.exports.download(
-                project_id, export_id, export_type=export_type
-            ):
-                out_f.write(chunk)
+            write_download_stream(
+                ls.projects.exports.download(
+                    project_id, export_id, export_type=export_type
+                ),
+                out_f,
+                desc=f"Download {export_type}",
+            )
     except ApiError as e:
         _log_api_error("export_download_api_error", e, "H4")
         print(e, file=sys.stderr)
@@ -195,5 +204,39 @@ def _run_export(
             f"Zip: {final_zip.resolve()}\n"
             f"Extracted dataset: {extract_dir.resolve()}",
         )
+        if normalize_frame_names:
+            n_renamed = normalize_ls_yolo_filenames(extract_dir)
+            if n_renamed:
+                print(
+                    f"Renamed {n_renamed} file(s) to frame_* (stripped Label Studio id prefix).\n",
+                    file=sys.stderr,
+                )
+        if guideline_mapping is not None:
+            if "YOLO" not in (export_type or "").upper():
+                print(
+                    "Skipping guideline export: export type is not YOLO (use YOLO_WITH_IMAGES or similar).\n",
+                    file=sys.stderr,
+                )
+            elif not guideline_mapping.is_file():
+                print(
+                    f"Skipping guideline export: mapping file not found: {guideline_mapping}\n",
+                    file=sys.stderr,
+                )
+            else:
+                gdir = write_guideline_seq_from_extract(
+                    extract_dir,
+                    guideline_mapping,
+                    run_dir,
+                    subdir=guideline_subdir,
+                )
+                print(
+                    f"Guideline-style export: {gdir.resolve()}\n",
+                    file=sys.stderr,
+                )
     else:
         print(f"Status of the export is OK.\nZip: {final_zip.resolve()}")
+        if guideline_mapping is not None and not extract:
+            print(
+                "Guideline export skipped: extraction disabled (--no-extract).\n",
+                file=sys.stderr,
+            )

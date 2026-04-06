@@ -17,6 +17,9 @@ Environment (details in README.md):
   LABEL_STUDIO_EXPORT_TYPE                       e.g. YOLO_WITH_IMAGES
   LABEL_STUDIO_OUTPUT_DIR                        Base directory for export-... run folders
   LABEL_STUDIO_SKIP_EXTRACT=1                    Skip unzipping (with --no-extract)
+  LABEL_STUDIO_GUIDELINE_MAPPING                 Path to JSON mapping for guideline_seq export
+  LABEL_STUDIO_NO_NORMALIZE_FRAME_NAMES=1        Keep LS hash-prefixed image/label names
+  LABEL_STUDIO_NO_TQDM=1                         Disable tqdm byte progress on stderr
   CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET  Cloudflare Access service tokens
 """
     p = argparse.ArgumentParser(
@@ -53,6 +56,22 @@ Environment (details in README.md):
         action="store_true",
         help="Keep only the zip; do not unzip into export-.../extracted/",
     )
+    p.add_argument(
+        "--no-normalize-frame-names",
+        action="store_true",
+        help="Do not rename images/labels to frame_<digits>.* under extracted/",
+    )
+    p.add_argument(
+        "--guideline-mapping",
+        type=Path,
+        default=None,
+        help="JSON file with yolo_to_guideline map; writes export-.../guideline_seq/ (needs --extract)",
+    )
+    p.add_argument(
+        "--guideline-subdir",
+        default="guideline_seq",
+        help="Subfolder under export-<project>-<id>/ for guideline output (default: guideline_seq)",
+    )
     return p
 
 
@@ -81,5 +100,29 @@ def main(argv: list[str] | None = None) -> None:
         "LABEL_STUDIO_SKIP_EXTRACT", ""
     ).strip().lower() not in ("1", "true", "yes")
 
+    guideline_mapping = args.guideline_mapping
+    if guideline_mapping is None:
+        gm = os.environ.get("LABEL_STUDIO_GUIDELINE_MAPPING", "").strip()
+        guideline_mapping = Path(gm) if gm else None
+
+    normalize_frame_names = not args.no_normalize_frame_names
+    if os.environ.get("LABEL_STUDIO_NO_NORMALIZE_FRAME_NAMES", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        normalize_frame_names = False
+
     ls, base, cf = _connect_label_studio()
-    _run_export(ls, base, cf, project_id, export_title, output_parent, extract=extract)
+    _run_export(
+        ls,
+        base,
+        cf,
+        project_id,
+        export_title,
+        output_parent,
+        extract=extract,
+        normalize_frame_names=normalize_frame_names,
+        guideline_mapping=guideline_mapping,
+        guideline_subdir=args.guideline_subdir,
+    )

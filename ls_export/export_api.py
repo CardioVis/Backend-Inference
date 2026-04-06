@@ -11,6 +11,7 @@ from label_studio_sdk.types.lse_task_filter_options_request import (
 from label_studio_sdk.types.serialization_option_request import SerializationOptionRequest
 from label_studio_sdk.types.serialization_options_request import SerializationOptionsRequest
 
+from ls_export.download_progress import download_stream_to_bytes
 from ls_export.logging_support import _agent_log, _log_api_error
 
 
@@ -121,4 +122,7 @@ def _ensure_json_export_ready(ls: LabelStudio, project_id: int, export_id: int) 
 
 
 def _download_json_export_bytes(ls: LabelStudio, project_id: int, export_id: int) -> bytes:
-    return b"".join(ls.projects.exports.download(project_id, export_id, export_type="JSON"))
+    return download_stream_to_bytes(
+        ls.projects.exports.download(project_id, export_id, export_type="JSON"),
+        desc="Download JSON export",
+    )

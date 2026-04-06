@@ -1,0 +1,12 @@
+{"sessionId": "35efb6", "hypothesisId": "H2", "location": "nb:after_infer", "message": "checkpoint_head", "data": {"NUM_MODEL_CLASSES": 9, "weight_out_c": 9}, "timestamp": 1775454784516}
+{"sessionId": "35efb6", "hypothesisId": "H2", "location": "nb:after_load_state_dict", "message": "strict_load_ok", "data": {"NUM_MODEL_CLASSES": 9}, "timestamp": 1775454786053}
+{"sessionId": "35efb6", "hypothesisId": "H3", "location": "nb:before_assert", "message": "class_names_vs_num_model", "data": {"len_CLASS_NAMES": 9, "NUM_MODEL_CLASSES": 9}, "timestamp": 1775454786136}
+{"sessionId": "35efb6", "hypothesisId": "H1", "location": "task2", "message": "frame0_fullres_labels", "data": {"unique_mr": [0, 4, 5, 6, 7], "shape": [1080, 1920]}, "timestamp": 1775454848328}
+{"sessionId": "35efb6", "hypothesisId": "H2", "location": "task2", "message": "frame0_class_layer", "data": {"class_id": 1, "fg_pixels_255": 0}, "timestamp": 1775454848519}
+{"sessionId": "35efb6", "hypothesisId": "H2", "location": "task2", "message": "frame0_class_layer", "data": {"class_id": 2, "fg_pixels_255": 0}, "timestamp": 1775454848557}
+{"sessionId": "35efb6", "hypothesisId": "H2", "location": "task2", "message": "frame0_class_layer", "data": {"class_id": 3, "fg_pixels_255": 0}, "timestamp": 1775454848599}
+{"sessionId": "35efb6", "hypothesisId": "H2", "location": "task2", "message": "frame0_class_layer", "data": {"class_id": 4, "fg_pixels_255": 22622}, "timestamp": 1775454848639}
+{"sessionId": "35efb6", "hypothesisId": "H2", "location": "task2", "message": "frame0_class_layer", "data": {"class_id": 5, "fg_pixels_255": 333392}, "timestamp": 1775454848679}
+{"sessionId": "35efb6", "hypothesisId": "H2", "location": "task2", "message": "frame0_class_layer", "data": {"class_id": 6, "fg_pixels_255": 75125}, "timestamp": 1775454848716}
+{"sessionId": "35efb6", "hypothesisId": "H2", "location": "task2", "message": "frame0_class_layer", "data": {"class_id": 7, "fg_pixels_255": 8009}, "timestamp": 1775454848760}
+{"sessionId": "35efb6", "hypothesisId": "H2", "location": "task2", "message": "frame0_class_layer", "data": {"class_id": 8, "fg_pixels_255": 0}, "timestamp": 1775454848805}

@@ -3,3 +3,6 @@
 checkpoints/
 __pycache__/
 ls_export/export-13-8
+guideline_seq_export/
+exports/
+features_data/
