@@ -24,6 +24,26 @@ Optional:
 |----------|-------------|
 | `LABEL_STUDIO_URL` | Base URL of your instance (default in script: `https://labeling.cardiovis.com/`). |
 
+### Cloudflare Access (service token headers)
+
+If Label Studio is behind **Cloudflare Access**, you must export **both** service-token values **before** running [`download_frames_labels.py`](download_frames_labels.py). The script maps them to the HTTP headers `CF-Access-Client-Id` and `CF-Access-Client-Secret`. Setting only the secret (or only the id) is not enough—the client sends both or neither.
+
+| Environment variable | Cloudflare header | Notes |
+|------------------------|-------------------|--------|
+| `CF_ACCESS_CLIENT_ID` | `CF-Access-Client-Id` | Also accepted: `CLOUDFLARE_ACCESS_CLIENT_ID`. |
+| `CF_ACCESS_CLIENT_SECRET` | `CF-Access-Client-Secret` | Also accepted: `CLOUDFLARE_ACCESS_CLIENT_SECRET`. |
+
+Example (shell):
+
+```bash
+export CF_ACCESS_CLIENT_ID="your-service-token-client-id"
+export CF_ACCESS_CLIENT_SECRET="your-service-token-client-secret"
+export LABEL_STUDIO_API_KEY="your-label-studio-token"
+python download_frames_labels.py --list-projects
+```
+
+If `/api/version` or downloads return HTML instead of JSON, confirm both variables are set and match the **Access** service token configured for your team (see stderr hints from the script).
+
 ## Choosing a project
 
 1. List projects your token can access (id and title, tab-separated):
@@ -96,11 +116,15 @@ Optional keys: `class_names`, `mask_notes`, `source_path_template` (e.g. `"/data
 | `LABEL_STUDIO_REPAIR_CF_IMAGES` | When behind Cloudflare, control client-side image repair into a `*_repaired.zip`. |
 | `LABEL_STUDIO_GUIDELINE_MAPPING` | Path to JSON mapping for `guideline_seq/` export (same as `--guideline-mapping`). |
 | `LABEL_STUDIO_NO_NORMALIZE_FRAME_NAMES` | Set to `1` to keep long LS-prefixed filenames under `extracted/`. |
-| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Service tokens when Label Studio is behind **Cloudflare Access** (see stderr hints from the script if `/api/version` returns HTML). |
+| `CF_ACCESS_CLIENT_ID` | **Required with** `CF_ACCESS_CLIENT_SECRET` when using Cloudflare Access (`CF-Access-Client-Id` header). |
+| `CF_ACCESS_CLIENT_SECRET` | **Required with** `CF_ACCESS_CLIENT_ID` when using Cloudflare Access (`CF-Access-Client-Secret` header). |
 
 ## Examples
 
 ```bash
+# If your instance uses Cloudflare Access, set both (see above) before any command:
+# export CF_ACCESS_CLIENT_ID="…"
+# export CF_ACCESS_CLIENT_SECRET="…"
 export LABEL_STUDIO_API_KEY="…"
 python download_frames_labels.py --list-projects
 python download_frames_labels.py -p 7 --export-title "Weekly backup"
