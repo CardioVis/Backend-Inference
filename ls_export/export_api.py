@@ -50,12 +50,11 @@ def _wait_for_converted_format(
 ) -> None:
     """POST /exports/.../convert is async; download must run after ConvertedFormat is completed."""
     _deadline = time.time() + float(os.environ.get("LABEL_STUDIO_CONVERT_TIMEOUT_SEC", "3600"))
-    while time.time() < _deadline:
-        try:
-            _exp = ls.projects.exports.get(project_id, export_pk)
-        except ApiError as _e:
-            _log_api_error("convert_poll_get_error", _e, "H-convert-poll")
-            raise
+    _last_match_status: str | None = None
+
+    def _convert_status() -> str:
+        nonlocal _last_match_status
+        _exp = ls.projects.exports.get(project_id, export_pk)
         _match = None
         for _c in _exp.converted_formats or []:
             if (_c.export_type or "").upper() == export_type.upper():
@@ -71,16 +70,36 @@ def _wait_for_converted_format(
             "H-convert-async",
         )
         if _match is None:
-            time.sleep(1.0)
-            continue
+            _last_match_status = "pending"
+            return "in_progress"
+        _last_match_status = _match.status or ""
         if _match.status == "failed":
             print(
                 f"Export conversion to {export_type} failed. "
                 f"Traceback (if any): {getattr(_match, 'traceback', None)}",
                 file=sys.stderr,
             )
+        return _last_match_status
+
+    started = time.time()
+    last_log = started
+    while time.time() < _deadline:
+        try:
+            st = _convert_status()
+        except ApiError as _e:
+            _log_api_error("convert_poll_get_error", _e, "H-convert-poll")
+            raise
+        now = time.time()
+        if now - last_log >= 15.0:
+            print(
+                f"  Waiting for {export_type} conversion… status={st!r} "
+                f"({int(now - started)}s elapsed)",
+                file=sys.stderr,
+            )
+            last_log = now
+        if st == "failed":
             sys.exit(1)
-        if _match.status == "completed":
+        if st == "completed":
             return
         time.sleep(1.0)
     print(

@@ -118,6 +118,26 @@ Optional keys: `class_names`, `mask_notes`, `source_path_template` (e.g. `"/data
 | `LABEL_STUDIO_NO_NORMALIZE_FRAME_NAMES` | Set to `1` to keep long LS-prefixed filenames under `extracted/`. |
 | `CF_ACCESS_CLIENT_ID` | **Required with** `CF_ACCESS_CLIENT_SECRET` when using Cloudflare Access (`CF-Access-Client-Id` header). |
 | `CF_ACCESS_CLIENT_SECRET` | **Required with** `CF_ACCESS_CLIENT_ID` when using Cloudflare Access (`CF-Access-Client-Secret` header). |
+| `LABEL_STUDIO_TASKS_FALLBACK` | `auto` (default): if snapshot export returns 500/fails, download via Tasks API. Set `0` to disable. |
+
+Copy [`.env.example`](.env.example) to `.env` (gitignored) to load credentials automatically.
+
+### When snapshot export returns HTTP 500
+
+Label Studio Enterprise snapshot export can fail while the UI still works. The script will automatically fall back to **task-by-task download** (tasks + authenticated image fetch + YOLO labels) when `LABEL_STUDIO_TASKS_FALLBACK=auto` (default). Force that path immediately:
+
+```bash
+python download_frames_labels.py --project-id 27 --tasks-fallback
+```
+
+Add `ann_*.json` (and masks/frames) from an existing `extracted/` folder without re-downloading:
+
+```bash
+python download_frames_labels.py --guideline-only -p 27 \
+  --guideline-mapping label_studio_exports/export-27-tasks-fallback/project_27_mapping.json
+```
+
+Output: `export-27-tasks-fallback/guideline_seq/json/ann_*.json`.
 
 ## Examples
 

@@ -16,8 +16,10 @@ from ls_export.export_api import (
     _export_task_filter_options,
     _wait_for_converted_format,
 )
+from ls_export.export_progress import poll_export_snapshot
 from ls_export.logging_support import _agent_log, _log_api_error
 from ls_export.guideline_export import write_guideline_seq_from_extract
+from ls_export.tasks_fallback import maybe_run_tasks_fallback
 from ls_export.yolo_patch import _patch_yolo_zip_labels_from_json
 
 
@@ -56,6 +58,42 @@ def _extract_zip_to_dir(zip_path: Path, dest_dir: Path) -> None:
         zf.extractall(dest_dir)
 
 
+def _api_error_is_server_failure(err: ApiError) -> bool:
+    code = err.status_code or 0
+    return code >= 500 or code in (408, 429)
+
+
+def _try_tasks_fallback(
+    ls: LabelStudio,
+    base_no_slash: str,
+    cf_headers: dict,
+    project_id: int,
+    output_parent: Path,
+    *,
+    extract: bool,
+    normalize_frame_names: bool,
+    guideline_mapping: Path | None,
+    guideline_subdir: str,
+    tasks_fallback: bool | None,
+    reason: str,
+) -> bool:
+    """Return True if fallback completed successfully (caller should return)."""
+    result = maybe_run_tasks_fallback(
+        ls,
+        base_no_slash,
+        cf_headers,
+        project_id,
+        output_parent,
+        extract=extract,
+        normalize_frame_names=normalize_frame_names,
+        guideline_mapping=guideline_mapping,
+        guideline_subdir=guideline_subdir,
+        explicit=tasks_fallback,
+        reason=reason,
+    )
+    return result is not None
+
+
 def _run_export(
     ls: LabelStudio,
     base_no_slash: str,
@@ -68,24 +106,57 @@ def _run_export(
     normalize_frame_names: bool = True,
     guideline_mapping: Path | None = None,
     guideline_subdir: str = "guideline_seq",
+    tasks_fallback: bool | None = None,
 ) -> None:
     export_type = os.environ.get("LABEL_STUDIO_EXPORT_TYPE", "YOLO_WITH_IMAGES")
     download_resources, repair_cf_images = _export_resource_flags(cf_headers)
 
-    if not os.environ.get("LABEL_STUDIO_EXPORT_VIEW_ID", "").strip():
+    view_id = os.environ.get("LABEL_STUDIO_EXPORT_VIEW_ID", "").strip()
+    if not view_id:
         print(
             "Tip: set LABEL_STUDIO_EXPORT_VIEW_ID to the Data Manager tab id from the URL "
-            "(…/data?tab=14 → export LABEL_STUDIO_EXPORT_VIEW_ID=14) so the export matches "
+            "(…/data?tab=34 → export LABEL_STUDIO_EXPORT_VIEW_ID=34) so the export matches "
             "the tasks you see in the UI.",
             file=sys.stderr,
         )
-    print(
-        "Export task filter: all tasks (unlabeled + unfinished included by default). "
-        "To restore the old scope, set LABEL_STUDIO_EXPORT_ANNOTATED_ONLY=1 and "
-        "LABEL_STUDIO_EXPORT_FINISHED_ONLY=1.\n",
-        file=sys.stderr,
-    )
+    else:
+        print(f"Using Data Manager view id {view_id} for export / fallback.\n", file=sys.stderr)
 
+    ann = os.environ.get("LABEL_STUDIO_EXPORT_ANNOTATED_ONLY", "").strip().lower() in ("1", "true", "yes")
+    fin = os.environ.get("LABEL_STUDIO_EXPORT_FINISHED_ONLY", "").strip().lower() in ("1", "true", "yes")
+    if ann or fin:
+        print(
+            f"Export task filter: annotated_only={ann}, finished_only={fin}.\n",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            "Export task filter: all tasks (unlabeled + unfinished included by default). "
+            "To narrow, set LABEL_STUDIO_EXPORT_ANNOTATED_ONLY=1 and/or "
+            "LABEL_STUDIO_EXPORT_FINISHED_ONLY=1.\n",
+            file=sys.stderr,
+        )
+
+    if tasks_fallback is True:
+        print("Using task-by-task download (--tasks-fallback).\n", file=sys.stderr)
+        run_tasks_only = maybe_run_tasks_fallback(
+            ls,
+            base_no_slash,
+            cf_headers,
+            project_id,
+            output_parent,
+            extract=extract,
+            normalize_frame_names=normalize_frame_names,
+            guideline_mapping=guideline_mapping,
+            guideline_subdir=guideline_subdir,
+            explicit=True,
+            reason="--tasks-fallback",
+        )
+        if run_tasks_only is None:
+            sys.exit(1)
+        return
+
+    print("Creating export snapshot on Label Studio…", file=sys.stderr)
     try:
         created = ls.projects.exports.create(
             id=project_id,
@@ -96,6 +167,20 @@ def _run_export(
     except ApiError as e:
         _log_api_error("export_create_api_error", e, "H4")
         print(e, file=sys.stderr)
+        if _api_error_is_server_failure(e) and _try_tasks_fallback(
+            ls,
+            base_no_slash,
+            cf_headers,
+            project_id,
+            output_parent,
+            extract=extract,
+            normalize_frame_names=normalize_frame_names,
+            guideline_mapping=guideline_mapping,
+            guideline_subdir=guideline_subdir,
+            tasks_fallback=tasks_fallback,
+            reason=f"export create HTTP {e.status_code}",
+        ):
+            return
         sys.exit(1)
 
     export_id = created.id
@@ -104,24 +189,54 @@ def _run_export(
         sys.exit(1)
 
     _agent_log("export_created", {"export_id": export_id}, "H4")
+    print(f"Export snapshot id={export_id}; waiting for completion…", file=sys.stderr)
 
-    while True:
-        try:
-            exp = ls.projects.exports.get(project_id, export_id)
-        except ApiError as e:
-            _log_api_error("export_get_api_error", e, "H4")
-            print(e, file=sys.stderr)
-            sys.exit(1)
-        st = exp.status or ""
-        if st == "failed":
-            _agent_log("export_failed", {"export_id": export_id, "status": st}, "H4")
-            print(f"Export {export_id} failed on the server.", file=sys.stderr)
-            sys.exit(1)
-        if st in ("completed",):
-            break
-        time.sleep(1.0)
+    def _snapshot_status() -> str:
+        exp = ls.projects.exports.get(project_id, export_id)
+        return exp.status or ""
+
+    try:
+        st = poll_export_snapshot(_snapshot_status, label="export snapshot")
+    except ApiError as e:
+        _log_api_error("export_get_api_error", e, "H4")
+        print(e, file=sys.stderr)
+        if _api_error_is_server_failure(e) and _try_tasks_fallback(
+            ls,
+            base_no_slash,
+            cf_headers,
+            project_id,
+            output_parent,
+            extract=extract,
+            normalize_frame_names=normalize_frame_names,
+            guideline_mapping=guideline_mapping,
+            guideline_subdir=guideline_subdir,
+            tasks_fallback=tasks_fallback,
+            reason=f"export poll HTTP {e.status_code}",
+        ):
+            return
+        sys.exit(1)
+
+    if st == "failed":
+        _agent_log("export_failed", {"export_id": export_id, "status": st}, "H4")
+        print(f"Export {export_id} failed on the server.", file=sys.stderr)
+        if _try_tasks_fallback(
+            ls,
+            base_no_slash,
+            cf_headers,
+            project_id,
+            output_parent,
+            extract=extract,
+            normalize_frame_names=normalize_frame_names,
+            guideline_mapping=guideline_mapping,
+            guideline_subdir=guideline_subdir,
+            tasks_fallback=tasks_fallback,
+            reason="export snapshot status=failed",
+        ):
+            return
+        sys.exit(1)
 
     _agent_log("export_completed", {"export_id": export_id}, "H4")
+    print(f"Converting export to {export_type}…", file=sys.stderr)
 
     try:
         ls.projects.exports.convert(
@@ -133,9 +248,40 @@ def _run_export(
     except ApiError as e:
         _log_api_error("export_convert_api_error", e, "H4")
         print(e, file=sys.stderr)
+        if _api_error_is_server_failure(e) and _try_tasks_fallback(
+            ls,
+            base_no_slash,
+            cf_headers,
+            project_id,
+            output_parent,
+            extract=extract,
+            normalize_frame_names=normalize_frame_names,
+            guideline_mapping=guideline_mapping,
+            guideline_subdir=guideline_subdir,
+            tasks_fallback=tasks_fallback,
+            reason=f"export convert HTTP {e.status_code}",
+        ):
+            return
         sys.exit(1)
 
-    _wait_for_converted_format(ls, export_id, project_id, export_type)
+    try:
+        _wait_for_converted_format(ls, export_id, project_id, export_type)
+    except SystemExit:
+        if _try_tasks_fallback(
+            ls,
+            base_no_slash,
+            cf_headers,
+            project_id,
+            output_parent,
+            extract=extract,
+            normalize_frame_names=normalize_frame_names,
+            guideline_mapping=guideline_mapping,
+            guideline_subdir=guideline_subdir,
+            tasks_fallback=tasks_fallback,
+            reason="export conversion failed or timed out",
+        ):
+            return
+        raise
 
     output_parent.mkdir(parents=True, exist_ok=True)
     run_dir = output_parent / f"export-{project_id}-{export_id}"
@@ -143,6 +289,7 @@ def _run_export(
     default_name = f"export-{project_id}-{export_id}-{export_type}.zip"
     out_path = run_dir / default_name
 
+    print(f"Downloading {export_type}…", file=sys.stderr)
     try:
         with open(out_path, "wb") as out_f:
             write_download_stream(
@@ -155,6 +302,20 @@ def _run_export(
     except ApiError as e:
         _log_api_error("export_download_api_error", e, "H4")
         print(e, file=sys.stderr)
+        if _api_error_is_server_failure(e) and _try_tasks_fallback(
+            ls,
+            base_no_slash,
+            cf_headers,
+            project_id,
+            output_parent,
+            extract=extract,
+            normalize_frame_names=normalize_frame_names,
+            guideline_mapping=guideline_mapping,
+            guideline_subdir=guideline_subdir,
+            tasks_fallback=tasks_fallback,
+            reason=f"export download HTTP {e.status_code}",
+        ):
+            return
         sys.exit(1)
 
     _agent_log("export_download_ok", {"path": str(out_path)}, "H4")

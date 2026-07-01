@@ -1,3 +1,4 @@
+.env
 .cursor/debug-988c41.log
 **/cardiovis-debug-988c41.ndjson
 checkpoints/
@@ -6,3 +7,9 @@ ls_export/export-13-8
 guideline_seq_export/
 exports/
 features_data/
+project-30.json
+*.mp4
+*.zip
+label_studio_exports/
+features_data_latest/
+label_studio_exports/export-28-tasks-fallback/export-28-tasks-fallback-YOLO_WITH_IMAGES.zip

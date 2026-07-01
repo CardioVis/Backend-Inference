@@ -3,7 +3,9 @@ import os
 import sys
 from pathlib import Path
 
+from ls_export.env_loader import load_repo_dotenv
 from ls_export.client import _connect_label_studio, _list_projects_print
+from ls_export.guideline_only import run_guideline_only
 from ls_export.run_export import _run_export
 
 
@@ -21,6 +23,7 @@ Environment (details in README.md):
   LABEL_STUDIO_NO_NORMALIZE_FRAME_NAMES=1        Keep LS hash-prefixed image/label names
   LABEL_STUDIO_NO_TQDM=1                         Disable tqdm byte progress on stderr
   CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET  Cloudflare Access service tokens
+  LABEL_STUDIO_TASKS_FALLBACK                  auto (default) | 1 | 0 — task API if snapshot export fails
 """
     p = argparse.ArgumentParser(
         description="Download a Label Studio project export (YOLO with images by default).",
@@ -72,15 +75,46 @@ Environment (details in README.md):
         default="guideline_seq",
         help="Subfolder under export-<project>-<id>/ for guideline output (default: guideline_seq)",
     )
+    p.add_argument(
+        "--tasks-fallback",
+        action="store_true",
+        help="Skip snapshot export; download frames via Tasks API (for LS export 500s)",
+    )
+    p.add_argument(
+        "--no-tasks-fallback",
+        action="store_true",
+        help="Do not fall back to Tasks API when snapshot export fails",
+    )
+    p.add_argument(
+        "--guideline-only",
+        action="store_true",
+        help="Only build guideline_seq/ from existing export-.../extracted/ (no LS download)",
+    )
+    p.add_argument(
+        "--from-run-dir",
+        type=Path,
+        default=None,
+        help="Export run folder containing extracted/ (with --guideline-only)",
+    )
     return p
 
 
 def main(argv: list[str] | None = None) -> None:
+    load_repo_dotenv()
     args = _build_argparser().parse_args(argv)
+    if args.tasks_fallback and args.no_tasks_fallback:
+        print("Use only one of --tasks-fallback and --no-tasks-fallback.", file=sys.stderr)
+        sys.exit(2)
+    tasks_fallback: bool | None = True if args.tasks_fallback else False if args.no_tasks_fallback else None
     if args.list_projects:
         ls, base, cf = _connect_label_studio()
         _list_projects_print(ls, base, cf)
         return
+
+    if args.guideline_only and not args.guideline_mapping:
+        gm = os.environ.get("LABEL_STUDIO_GUIDELINE_MAPPING", "").strip()
+        if gm:
+            args.guideline_mapping = Path(gm)
 
     project_id = (
         args.project_id
@@ -113,6 +147,22 @@ def main(argv: list[str] | None = None) -> None:
     ):
         normalize_frame_names = False
 
+    if args.guideline_only:
+        if guideline_mapping is None:
+            print(
+                "Guideline-only mode requires --guideline-mapping (or LABEL_STUDIO_GUIDELINE_MAPPING).\n",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        run_guideline_only(
+            project_id=project_id,
+            output_parent=output_parent,
+            guideline_mapping=guideline_mapping,
+            guideline_subdir=args.guideline_subdir,
+            run_dir=args.from_run_dir,
+        )
+        return
+
     ls, base, cf = _connect_label_studio()
     _run_export(
         ls,
@@ -125,4 +175,5 @@ def main(argv: list[str] | None = None) -> None:
         normalize_frame_names=normalize_frame_names,
         guideline_mapping=guideline_mapping,
         guideline_subdir=args.guideline_subdir,
+        tasks_fallback=tasks_fallback,
     )

@@ -1,4 +1,4 @@
-"""Default CLASS_NAMES / EXPORT_MASK_LAYERS / overlay constants (aligned with predict_frames_guideline_overlay cell 0)."""
+"""Default CLASS_NAMES / EXPORT_MASK_LAYERS / overlay constants (18 logits: 0=bg, 1–17 foreground)."""
 
 from __future__ import annotations
 
@@ -8,45 +8,92 @@ import numpy as np
 import torch
 
 TAG_TO_CLASS = {
-    "epicardial adipose tissue": 1,
+    "phrenic nerve": 1,
     "pericardium": 2,
-    "phrenic nerve": 3,
+    "epicardial adipose tissue": 3,
     "aortic root": 4,
     "auricles": 5,
-    "epicardial fat on aortic": 6,
-    "grasper": 7,
-    "needle holders": 8,
-    "pericardial stay sutures": 9,
-    "pericardium boundary": 10,
+    "pericardium boundary": 6,
+    "needle holders": 7,
+    "Cardioplegia cannula": 8,
+    "Surgical pledget": 9,
+    "Suction": 10,
+    "Chitwood aortic cross-lamp": 11,
+    "Left suction tube": 12,
+    "Snare tubing": 13,
+    "Electrocautery": 14,
+    "Right Ventricle": 15,
+    "Long Forceps": 16,
+    "Epicardial fat on aortic": 17,
 }
 
 CLASS_NAMES = [
     "Background",
-    "Epicardial adipose tissue",
-    "Pericardium",
-    "Phrenic nerve",
-    "Aortic root",
-    "Auricles",
+    "phrenic nerve",
+    "pericardium",
+    "epicardial adipose tissue",
+    "aortic root",
+    "auricles",
+    "pericardium boundary",
+    "needle holders",
+    "Cardioplegia cannula",
+    "Surgical pledget",
+    "Suction",
+    "Chitwood aortic cross-lamp",
+    "Left suction tube",
+    "Snare tubing",
+    "Electrocautery",
+    "Right Ventricle",
+    "Long Forceps",
     "Epicardial fat on aortic",
-    "Grasper",
-    "Needle holders",
-    "Pericardial stay sutures",
-    "Pericardium boundary",
 ]
 
 CLASS_COLORS_BGR = [
-    (0, 0, 0),
-    (0, 165, 255),
-    (0, 200, 0),
-    (255, 0, 0),
-    (255, 128, 0),
-    (255, 0, 255),
-    (0, 255, 255),
-    (180, 105, 255),
-    (42, 42, 165),
-    (255, 0, 255),
-    (0, 255, 0),
+    (0, 0, 0),           # 0 Background
+    (0, 165, 255),       # 1 phrenic nerve
+    (0, 200, 0),         # 2 pericardium (guideline anchor; band uses GUIDELINE_COLOR_BGR)
+    (255, 0, 0),         # 3 epicardial adipose tissue
+    (255, 128, 0),       # 4 aortic root
+    (255, 0, 255),       # 5 auricles
+    (0, 255, 255),       # 6 pericardium boundary
+    (180, 105, 255),     # 7 needle holders
+    (42, 42, 165),       # 8 Cardioplegia cannula
+    (255, 0, 255),       # 9 Surgical pledget
+    (0, 255, 0),         # 10 Suction
+    (0, 140, 255),       # 11 Chitwood aortic cross-lamp
+    (255, 191, 0),       # 12 Left suction tube
+    (203, 192, 255),     # 13 Snare tubing
+    (0, 0, 255),         # 14 Electrocautery
+    (128, 0, 128),       # 15 Right Ventricle
+    (19, 69, 139),       # 16 Long Forceps
+    (32, 165, 218),      # 17 Epicardial fat on aortic
 ]
+
+# Optional uint8 LUT of length NUM_MODEL_CLASSES when checkpoint head size != len(CLASS_NAMES).
+MODEL_CLASS_TO_SEMANTIC: np.ndarray | None = None
+
+assert len(CLASS_COLORS_BGR) == len(CLASS_NAMES)
+
+
+def _export_slug(name: str) -> str:
+    return name.strip().lower().replace(" ", "_")
+
+
+def _validate_tag_to_class() -> None:
+    seen: dict[int, str] = {}
+    for tag, class_id in TAG_TO_CLASS.items():
+        if class_id <= 0 or class_id >= len(CLASS_NAMES):
+            raise ValueError(
+                f"TAG_TO_CLASS[{tag!r}]={class_id} out of range [1, {len(CLASS_NAMES) - 1}]"
+            )
+        if class_id in seen:
+            raise ValueError(
+                f"Duplicate class id {class_id} for tags {seen[class_id]!r} and {tag!r}"
+            )
+        seen[class_id] = tag
+
+
+_validate_tag_to_class()
 
 ALL_FOREGROUND_IDS = tuple(range(1, len(CLASS_NAMES)))
 GUIDELINE_ANCHOR_CLASS_ID = TAG_TO_CLASS["pericardium"]
@@ -56,78 +103,38 @@ DISPLAY_CLASS_NAMES: dict[int, str] = {}
 BLINK_WARNING_CLASS_ID = TAG_TO_CLASS["phrenic nerve"]
 BLINK_WARNING_PERIOD_FRAMES = 8
 
-EXPORT_MASK_LAYERS = [
-    {
-        "class_id": 1,
-        "subdir": "class01_epicardial_adipose",
-        "file_prefix": "class01_",
-        "json_key": "class_1_epicardial_adipose_tissue",
-        "note": "0/255 binary, model id 1 (epicardial adipose tissue).",
-    },
-    {
-        "class_id": 2,
-        "subdir": "class02_pericardium",
-        "file_prefix": "class02_",
-        "json_key": "class_2_pericardium_full_segmentation",
-        "note": "0/255 binary, model id 2 (pericardium); guideline anchor.",
-    },
-    {
-        "class_id": 3,
-        "subdir": "class03_phrenic",
-        "file_prefix": "class03_",
-        "json_key": "class_3_phrenic_nerve",
-        "note": "0/255 binary, model id 3 (phrenic nerve).",
-    },
-    {
-        "class_id": 4,
-        "subdir": "class04_aortic_root",
-        "file_prefix": "class04_",
-        "json_key": "class_4_aortic_root",
-        "note": "0/255 binary, model id 4 (aortic root).",
-    },
-    {
-        "class_id": 5,
-        "subdir": "class05_auricles",
-        "file_prefix": "class05_",
-        "json_key": "class_5_auricles",
-        "note": "0/255 binary, model id 5 (auricles).",
-    },
-    {
-        "class_id": 6,
-        "subdir": "class06_epicardial_fat_aortic",
-        "file_prefix": "class06_",
-        "json_key": "class_6_epicardial_fat_on_aortic",
-        "note": "0/255 binary, model id 6 (epicardial fat on aortic).",
-    },
-    {
-        "class_id": 7,
-        "subdir": "class07_grasper",
-        "file_prefix": "class07_",
-        "json_key": "class_7_grasper",
-        "note": "0/255 binary, model id 7 (grasper).",
-    },
-    {
-        "class_id": 8,
-        "subdir": "class08_needle_holders",
-        "file_prefix": "class08_",
-        "json_key": "class_8_needle_holders",
-        "note": "0/255 binary, model id 8 (needle holders).",
-    },
-    {
-        "class_id": 9,
-        "subdir": "class09_pericardial_stay_sutures",
-        "file_prefix": "class09_",
-        "json_key": "class_9_pericardial_stay_sutures",
-        "note": "0/255 binary, model id 9 (pericardial stay sutures).",
-    },
-    {
-        "class_id": 10,
-        "subdir": "class10_pericardium_boundary",
-        "file_prefix": "class10_",
-        "json_key": "class_10_pericardium_boundary",
-        "note": "0/255 binary, model id 10 (pericardium boundary).",
-    },
-]
+
+def build_export_mask_layers(
+    class_names: list[str] | None = None,
+    guideline_anchor_class_id: int | None = None,
+) -> list[dict[str, Any]]:
+    """One export layer per foreground class (ids 1 .. len(class_names)-1)."""
+    names = class_names if class_names is not None else CLASS_NAMES
+    anchor = (
+        guideline_anchor_class_id
+        if guideline_anchor_class_id is not None
+        else GUIDELINE_ANCHOR_CLASS_ID
+    )
+    layers: list[dict[str, Any]] = []
+    for class_id in range(1, len(names)):
+        label = names[class_id]
+        slug = _export_slug(label)
+        note = f"0/255 binary, model id {class_id} ({label})."
+        if class_id == anchor:
+            note += " Guideline anchor (centerline / band)."
+        layers.append(
+            {
+                "class_id": class_id,
+                "subdir": f"class{class_id:02d}_{slug}",
+                "file_prefix": f"class{class_id:02d}_",
+                "json_key": f"class_{class_id}_{slug}",
+                "note": note,
+            }
+        )
+    return layers
+
+
+EXPORT_MASK_LAYERS = build_export_mask_layers()
 
 # Downstream JSON uses key "pericardium_class"; value is the guideline anchor id.
 PERICARDIUM_CLASS = GUIDELINE_ANCHOR_CLASS_ID

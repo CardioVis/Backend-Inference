@@ -8,6 +8,7 @@ from label_studio_sdk import LabelStudio
 from label_studio_sdk.core.api_error import ApiError
 from label_studio_sdk.types.token_refresh_response import TokenRefreshResponse
 
+from ls_export.env_loader import load_repo_dotenv
 from ls_export.logging_support import _agent_log, _log_api_error
 
 
@@ -105,6 +106,8 @@ def _cf_access_headers():
 
 def _connect_label_studio() -> tuple[LabelStudio, str, dict]:
     """Validate env, probe host, build SDK client, return (client, base_url_no_trailing_slash, cf_headers)."""
+    if load_repo_dotenv():
+        _agent_log("dotenv_loaded", {"path": "Backend-Inference/.env"}, "H-env")
     label_studio_url = _label_studio_url()
     api_key = _label_studio_api_key()
     if not api_key:
